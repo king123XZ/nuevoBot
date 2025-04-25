@@ -1,4 +1,5 @@
 const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
 const { handleMessage } = require('./handler');
 
 async function startBot() {
@@ -15,6 +16,16 @@ async function startBot() {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
         await handleMessage(sock, msg);
+    });
+
+    // Mostrar el QR en la terminal
+    sock.ev.on('connection.update', (update) => {
+        const { qr } = update;
+        if (qr) {
+            qrcode.generate(qr, { small: true }, (qrCode) => {
+                console.log(qrCode);
+            });
+        }
     });
 }
 
