@@ -1,38 +1,95 @@
-const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode');  // Cambiar por qrcode para generar imagen
-const fs = require('fs');
-const { handleMessage } = require('./handler');
+import { join, dirname } from 'path';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { setupMaster, fork } from 'cluster';
+import { watchFile, unwatchFile } from 'fs';
+import cfonts from 'cfonts';
+import { createInterface } from 'readline';
+import yargs from 'yargs';
+import chalk from 'chalk';
 
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('./session');
+console.log('\n✰ Iniciando Bot ✰');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(__dirname);
+const { name, description, author, version } = require(join(__dirname, './package.json'));
+const { say } = cfonts;
+const rl = createInterface(process.stdin, process.stdout);
 
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,  // Deshabilitar QR en terminal
+say('MiBot', {
+    font: 'block',
+    align: 'center',
+    colors: ['white']
+});
+say(`Multi Device`, {
+    font: 'chrome',
+    align: 'center',
+    colors: ['red']
+});
+say(`Developed By • TuNombre`, {
+    font: 'console',
+    align: 'center',
+    colors: ['magenta']
+});
+
+var isRunning = false;
+
+function start(file) {
+    if (isRunning) return;
+    isRunning = true;
+    let args = [join(__dirname, file), ...process.argv.slice(2)];
+
+    say([process.argv[0], ...args].join(' '), {
+        font: 'console',
+        align: 'center',
+        colors: ['green']
     });
 
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('messages.upsert', async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-        await handleMessage(sock, msg);
+    setupMaster({
+        exec: args[0],
+        args: args.slice(1),
     });
 
-    // Generar y guardar QR como imagen
-    sock.ev.on('connection.update', (update) => {
-        const { qr } = update;
-        if (qr) {
-            qrcode.toFile('./qr.png', qr, (err) => {
-                if (err) {
-                    console.error('Error generando el QR:', err);
-                } else {
-                    console.log('QR generado como qr.png');
-                }
-            });
+    let p = fork();
+
+    p.on('message', data => {
+        switch (data) {
+            case 'reset':
+                p.process.kill();
+                isRunning = false;
+                start.apply(this, arguments);
+                break;
+            case 'uptime':
+                p.send(process.uptime());
+                break;
         }
     });
+
+    p.on('exit', (_, code) => {
+        isRunning = false;
+        console.error('🚩 Error:\n', code);
+        process.exit();
+        if (code === 0) return;
+        watchFile(args[0], () => {
+            unwatchFile(args[0]);
+            start(file);
+        });
+    });
+
+    let opts = new Object(yargs(process.argv.slice(2)).exitProcess(false).parse());
+
+    if (!opts['test'])
+        if (!rl.listenerCount()) rl.on('line', line => {
+            p.emit('message', line.trim());
+        });
 }
 
-startBot();
+process.on('warning', (warning) => {
+    if (warning.name === 'MaxListenersExceededWarning') {
+        console.warn('🚩 Se excedió el límite de Listeners en:');
+        console.warn(warning.stack);
+    }
+});
+
+start('bot.js');
+
 
