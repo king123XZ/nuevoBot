@@ -1,5 +1,6 @@
 const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');  // Cambiar por qrcode para generar imagen
+const fs = require('fs');
 const { handleMessage } = require('./handler');
 
 async function startBot() {
@@ -7,7 +8,7 @@ async function startBot() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
+        printQRInTerminal: false,  // Deshabilitar QR en terminal
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -18,15 +19,20 @@ async function startBot() {
         await handleMessage(sock, msg);
     });
 
-    // Mostrar el QR en la terminal
+    // Generar y guardar QR como imagen
     sock.ev.on('connection.update', (update) => {
         const { qr } = update;
         if (qr) {
-            qrcode.generate(qr, { small: true }, (qrCode) => {
-                console.log(qrCode);
+            qrcode.toFile('./qr.png', qr, (err) => {
+                if (err) {
+                    console.error('Error generando el QR:', err);
+                } else {
+                    console.log('QR generado como qr.png');
+                }
             });
         }
     });
 }
 
 startBot();
+
